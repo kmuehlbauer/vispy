@@ -13,7 +13,7 @@ import numpy as np
 
 from .visual import Visual
 from .shaders import Function, FunctionChain
-from ..gloo import VertexBuffer, IndexBuffer
+from ..gloo import VertexBuffer, IndexBuffer, Texture2D
 from ..geometry import MeshData
 from ..color import Color, get_colormap
 from ..ext.six import string_types
@@ -97,6 +97,96 @@ void main() {
 }
 """  # noqa
 
+# Shaders for textured lit rendering (using phong shading)
+texture_shading_vertex_template = """
+varying vec3 v_normal_vec;
+varying vec3 v_light_vec;
+varying vec3 v_eye_vec;
+
+varying vec4 v_ambientk;
+varying vec4 v_light_color;
+varying vec4 v_base_color;
+
+varying vec2 v_texcoord;
+
+void main() {
+    v_ambientk = $ambientk;
+    v_light_color = $light_color;
+    v_base_color = $color_transform($base_color);
+
+    v_texcoord = $texcoord;
+
+    vec4 pos_scene = $visual2scene($to_vec4($position));
+    vec4 normal_scene = $visual2scene(vec4($normal, 1.0));
+    vec4 origin_scene = $visual2scene(vec4(0.0, 0.0, 0.0, 1.0));
+
+    normal_scene /= normal_scene.w;
+    origin_scene /= origin_scene.w;
+
+    vec3 normal = normalize(normal_scene.xyz - origin_scene.xyz);
+    v_normal_vec = normal; //VARYING COPY
+
+    vec4 pos_front = $scene2doc(pos_scene);
+    pos_front.z += 0.01;
+    pos_front = $doc2scene(pos_front);
+    pos_front /= pos_front.w;
+
+    vec4 pos_back = $scene2doc(pos_scene);
+    pos_back.z -= 0.01;
+    pos_back = $doc2scene(pos_back);
+    pos_back /= pos_back.w;
+
+    vec3 eye = normalize(pos_front.xyz - pos_back.xyz);
+    v_eye_vec = eye; //VARYING COPY
+
+    vec3 light = normalize($light_dir.xyz);
+    v_light_vec = light; //VARYING COPY
+
+    gl_Position = $transform($to_vec4($position));
+}
+"""
+
+texture_shading_fragment_template = """
+varying vec3 v_normal_vec;
+varying vec3 v_light_vec;
+varying vec3 v_eye_vec;
+
+varying vec4 v_ambientk;
+varying vec4 v_light_color;
+varying vec4 v_base_color;
+
+varying vec2 v_texcoord;
+uniform sampler2D u_texture;
+uniform bool u_use_texture;
+
+void main() {
+    //DIFFUSE
+    float diffusek = dot(v_light_vec, v_normal_vec);
+    // clamp, because 0 < theta < pi/2
+    diffusek  = clamp(diffusek, 0.0, 1.0);
+    vec4 diffuse_color = v_light_color * diffusek;
+
+    //SPECULAR
+    //reflect light wrt normal for the reflected ray, then
+    //find the angle made with the eye
+    float speculark = 0.0;
+    if ($shininess > 0) {
+        speculark = dot(reflect(v_light_vec, v_normal_vec), v_eye_vec);
+        speculark = clamp(speculark, 0.0, 1.0);
+        //raise to the material's shininess, multiply with a
+        //small factor for spread
+        speculark = 20.0 * pow(speculark, 1.0 / $shininess);
+    }
+    vec4 specular_color = v_light_color * speculark;
+
+    vec4 base_color = v_base_color;
+    if (u_use_texture) {
+        base_color = vec4(texture2D(u_texture, v_texcoord).rgb, v_base_color.a);
+    }
+    gl_FragColor = base_color * (v_ambientk + diffuse_color) + specular_color;
+}
+"""  # noqa
+
 # Shader code for non lighted rendering
 vertex_template = """
 varying vec4 v_base_color;
@@ -114,6 +204,32 @@ void main() {
 }
 """
 
+texture_vertex_template = """
+varying vec4 v_base_color;
+varying vec2 v_texcoord;
+
+void main() {
+    v_texcoord = $texcoord;
+    v_base_color = $color_transform($base_color);
+    gl_Position = $transform($to_vec4($position));
+}
+"""
+
+texture_fragment_template = """
+varying vec4 v_base_color;
+
+varying vec2 v_texcoord;
+uniform sampler2D u_texture;
+uniform bool u_use_texture;
+
+void main() {
+    if (u_use_texture) {
+        gl_FragColor = texture2D(u_texture, v_texcoord);
+    } else {
+        gl_FragColor = v_base_color;
+    }
+}
+"""
 
 # Functions that can be used as is (don't have template variables)
 # Consider these stored in a central location in vispy ...
@@ -176,7 +292,8 @@ class MeshVisual(Visual):
     """
     def __init__(self, vertices=None, faces=None, vertex_colors=None,
                  face_colors=None, color=(0.5, 0.5, 1, 1), vertex_values=None,
-                 meshdata=None, shading=None, mode='triangles', **kwargs):
+                 meshdata=None, shading=None, mode='triangles',
+                 texcoords=None, texture=None, **kwargs):
 
         # Function for computing phong shading
         # self._phong = Function(phong_template)
@@ -185,17 +302,23 @@ class MeshVisual(Visual):
         self.shading = shading
 
         if shading is not None:
-            Visual.__init__(self, vcode=shading_vertex_template,
-                            fcode=shading_fragment_template,
-                            **kwargs)
-
+            #if texture is not None and texcoords is not None:
+            if texcoords is not None:
+                vcode = texture_shading_vertex_template
+                fcode = texture_shading_fragment_template
+            else:
+                vcode = shading_vertex_template
+                fcode = shading_fragment_template
         else:
-            Visual.__init__(self, vcode=vertex_template,
-                            fcode=fragment_template,
-                            **kwargs)
+            if texcoords is not None:
+                vcode = texture_vertex_template
+                fcode = texture_fragment_template
+            else:
+                vcode = vertex_template
+                fcode = fragment_template
+        Visual.__init__(self, vcode=vcode, fcode=fcode, **kwargs)
 
-        self.set_gl_state('translucent', depth_test=True,
-                          cull_face=False)
+        self.set_gl_state('translucent', depth_test=True, cull_face=False)
 
         # Define buffers
         self._vertices = VertexBuffer(np.zeros((0, 3), dtype=np.float32))
@@ -208,6 +331,11 @@ class MeshVisual(Visual):
         self._cmap = get_colormap('cubehelix')
         self._clim = 'auto'
 
+        self._texcoords = VertexBuffer(np.zeros((0, 2), dtype=np.float32))
+        self._texture_data = texture
+        self.texture = texture
+        self._use_texture = texcoords is not None
+
         # Uniform color
         self._color = Color(color)
 
@@ -216,17 +344,17 @@ class MeshVisual(Visual):
         # Note we do not call subclass set_data -- often the signatures
         # do no match.
         MeshVisual.set_data(
-            self, vertices=vertices, faces=faces, vertex_colors=vertex_colors,
-            face_colors=face_colors, vertex_values=vertex_values,
-            meshdata=meshdata, color=color)
+            self, vertices=vertices, faces=faces, texcoords=texcoords,
+            vertex_colors=vertex_colors, face_colors=face_colors,
+            vertex_values=vertex_values, meshdata=meshdata, color=color)
 
         # primitive mode
         self._draw_mode = mode
         self.freeze()
 
-    def set_data(self, vertices=None, faces=None, vertex_colors=None,
-                 face_colors=None, color=None, vertex_values=None,
-                 meshdata=None):
+    def set_data(self, vertices=None, faces=None, texcoords=None,
+                 vertex_colors=None, face_colors=None, color=None,
+                 vertex_values=None, meshdata=None):
         """Set the mesh data
 
         Parameters
@@ -235,6 +363,8 @@ class MeshVisual(Visual):
             The vertices.
         faces : array-like | None
             The faces.
+        texcoords : array-like | None
+            The texture coordinates.
         vertex_colors : array-like | None
             Colors to use for each vertex.
         face_colors : array-like | None
@@ -250,6 +380,7 @@ class MeshVisual(Visual):
             self._meshdata = meshdata
         else:
             self._meshdata = MeshData(vertices=vertices, faces=faces,
+                                      texcoords=texcoords,
                                       vertex_colors=vertex_colors,
                                       face_colors=face_colors,
                                       vertex_values=vertex_values)
@@ -257,6 +388,15 @@ class MeshVisual(Visual):
         if color is not None:
             self._color = Color(color)
         self.mesh_data_changed()
+
+    @property
+    def texture(self):
+        return self._texture_data
+
+    @texture.setter
+    def texture(self, texture):
+        self._texture_data = texture
+        self._texture = Texture2D(texture) if texture is not None else None
 
     @property
     def clim(self):
@@ -361,6 +501,14 @@ class MeshVisual(Visual):
             self._normals.set_data(md.get_vertex_normals(), convert=True)
             self._faces.set_data(md.get_faces(), convert=True)
             self._index_buffer = self._faces
+
+            texcoords = md.get_texcoords()
+            if texcoords is not None:
+                self._texcoords.set_data(texcoords, convert=True)
+                self.shared_program.vert['texcoord'] = self._texcoords
+                self.shared_program['u_texture'] = self._texture
+                self.shared_program['u_use_texture'] = self._use_texture
+
             if md.has_vertex_color():
                 colors = md.get_vertex_colors()
                 colors = colors.astype(np.float32)
@@ -391,6 +539,14 @@ class MeshVisual(Visual):
             else:
                 self._normals.set_data(np.zeros((0, 3), dtype=np.float32))
             self._index_buffer = None
+
+            texcoords = md.get_texcoords(indexed='faces')
+            if texcoords is not None:
+                self._texcoords.set_data(texcoords, convert=True)
+                self.shared_program.vert['texcoord'] = self._texcoords
+                self.shared_program['u_texture'] = self._texture
+                self.shared_program['u_use_texture'] = self._use_texture
+
             if md.has_vertex_color():
                 colors = md.get_vertex_colors(indexed='faces')
                 colors = colors.astype(np.float32)

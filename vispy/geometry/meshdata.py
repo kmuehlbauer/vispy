@@ -64,11 +64,14 @@ class MeshData(object):
     results and avoiding unnecessary conversions.
     """
 
-    def __init__(self, vertices=None, faces=None, edges=None,
+    def __init__(self, vertices=None, faces=None, edges=None, texcoords=None,
                  vertex_colors=None, face_colors=None, vertex_values=None):
         self._vertices = None  # (Nv,3) array of vertex coordinates
         self._vertices_indexed_by_faces = None  # (Nf, 3, 3) vertex coordinates
         self._vertices_indexed_by_edges = None  # (Ne, 2, 3) vertex coordinates
+
+        self._texcoords = None # (Nt, 2) array of texture coordinates
+        self._texcoords_indexed_by_faces = None # (Nt, 3, 2) texture coordinates
 
         # mappings between vertices, faces, and edges
         self._faces = None  # Nx3 indices into self._vertices, 3 verts/face
@@ -104,6 +107,8 @@ class MeshData(object):
             self.set_vertices(vertices, indexed=indexed)
             if faces is not None:
                 self.set_faces(faces)
+            if texcoords is not None:
+                self.set_texcoords(texcoords, indexed=indexed)
             if vertex_colors is not None:
                 self.set_vertex_colors(vertex_colors, indexed=indexed)
             if face_colors is not None:
@@ -195,6 +200,59 @@ class MeshData(object):
             return self._vertices_indexed_by_faces
         else:
             raise Exception("Invalid indexing mode. Accepts: None, 'faces'")
+
+    def set_texcoords(self, texcoords=None, indexed=None):
+        """Set the mesh texture coordinates
+
+        Parameters
+        ----------
+        texcoords : ndarray | None
+            The array (Nv, 2) of vertex coordinates.
+        indexed : str | None
+            If indexed=='faces', then the data must have shape (Nt, 3, 2) and
+            is assumed to be already indexed as a list of faces.
+        """
+        if indexed is None:
+            if texcoords is not None:
+                self._texcoords = texcoords
+            self._texcoords_indexed_by_faces = None
+        elif indexed == 'faces':
+            self._texcoords = None
+            if texcoords is not None:
+                self._texcoords_indexed_by_faces = texcoords
+        else:
+            raise Exception("Invalid indexing mode. Accepts: None, 'faces'")
+
+    def get_texcoords(self, indexed=None):
+        """Get the texture coordinates
+
+        Parameters
+        ----------
+        indexed : str | None
+            If Note, return an array (N,2) of the texture coordinates of
+            vertices in the mesh. By default, each unique vertex appears only
+            once. If indexed is 'faces', then the array will instead contain
+            three vertices per face in the mesh (and a single vertex may appear
+            more than once in the array).
+
+        Returns
+        -------
+        texcoords : ndarray
+            The texture coordinates.
+        """
+        if indexed is None:
+            if (self._texcoords is None and
+                    self._texcoords_indexed_by_faces is not None):
+                self._compute_unindexed_texcoords()
+            return self._texcoords
+        elif indexed == 'faces':
+            if (self._texcoords_indexed_by_faces is None and
+                    self._texcoords is not None):
+                self._texcoords_indexed_by_faces = \
+                    self._texcoords[self.get_faces()]
+            return self._texcoords_indexed_by_faces
+        else:
+            raise ValueError("Invalid indexing mode. Accepts: None, 'faces'")
 
     def get_bounds(self):
         """Get the mesh bounds
@@ -568,6 +626,9 @@ class MeshData(object):
                 self._vertex_faces[index].append(i)
                 self._faces[i, j] = index
         self._vertices = np.array(self._vertices, dtype=np.float32)
+
+    def _compute_unindexed_texcoords(self):
+        raise NotImplementedError()
 
     def get_vertex_faces(self):
         """
