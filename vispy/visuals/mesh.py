@@ -281,6 +281,10 @@ class MeshVisual(Visual):
         The color to use.
     vertex_values : array-like | None
         The values to use for each vertex (for colormapping).
+    texcoords : array-like | None
+        The texture coordinates.
+    texture : array-like | None
+        The texture.
     meshdata : instance of MeshData | None
         The meshdata.
     shading : str | None
@@ -292,8 +296,9 @@ class MeshVisual(Visual):
     """
     def __init__(self, vertices=None, faces=None, vertex_colors=None,
                  face_colors=None, color=(0.5, 0.5, 1, 1), vertex_values=None,
-                 meshdata=None, shading=None, mode='triangles',
-                 texcoords=None, texture=None, **kwargs):
+                 texcoords=None, texture=None, meshdata=None, shading=None,
+                 mode='triangles',
+                 **kwargs):
 
         # Function for computing phong shading
         # self._phong = Function(phong_template)
