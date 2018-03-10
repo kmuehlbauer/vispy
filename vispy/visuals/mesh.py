@@ -157,7 +157,7 @@ varying vec4 v_base_color;
 
 varying vec2 v_texcoord;
 uniform sampler2D u_texture;
-uniform bool u_use_texture;
+uniform bool u_show_texture;
 
 void main() {
     //DIFFUSE
@@ -180,7 +180,7 @@ void main() {
     vec4 specular_color = v_light_color * speculark;
 
     vec4 base_color = v_base_color;
-    if (u_use_texture) {
+    if (u_show_texture) {
         base_color = vec4(texture2D(u_texture, v_texcoord).rgb, v_base_color.a);
     }
     gl_FragColor = base_color * (v_ambientk + diffuse_color) + specular_color;
@@ -220,10 +220,10 @@ varying vec4 v_base_color;
 
 varying vec2 v_texcoord;
 uniform sampler2D u_texture;
-uniform bool u_use_texture;
+uniform bool u_show_texture;
 
 void main() {
-    if (u_use_texture) {
+    if (u_show_texture) {
         gl_FragColor = texture2D(u_texture, v_texcoord);
     } else {
         gl_FragColor = v_base_color;
@@ -334,7 +334,7 @@ class MeshVisual(Visual):
         self._texcoords = VertexBuffer(np.zeros((0, 2), dtype=np.float32))
         self._texture_data = texture
         self.texture = texture
-        self._use_texture = texcoords is not None
+        self._show_texture = texcoords is not None
 
         # Uniform color
         self._color = Color(color)
@@ -397,6 +397,15 @@ class MeshVisual(Visual):
     def texture(self, texture):
         self._texture_data = texture
         self._texture = Texture2D(texture) if texture is not None else None
+
+    @property
+    def show_texture(self):
+        return self._show_texture
+
+    @show_texture.setter
+    def show_texture(self, show_texture):
+        self._show_texture = show_texture
+        self.mesh_data_changed()
 
     @property
     def clim(self):
@@ -507,7 +516,9 @@ class MeshVisual(Visual):
                 self._texcoords.set_data(texcoords, convert=True)
                 self.shared_program.vert['texcoord'] = self._texcoords
                 self.shared_program['u_texture'] = self._texture
-                self.shared_program['u_use_texture'] = self._use_texture
+                self.shared_program['u_show_texture'] = self.show_texture
+            else:
+                self.shared_program['u_show_texture'] = False
 
             if md.has_vertex_color():
                 colors = md.get_vertex_colors()
@@ -545,7 +556,9 @@ class MeshVisual(Visual):
                 self._texcoords.set_data(texcoords, convert=True)
                 self.shared_program.vert['texcoord'] = self._texcoords
                 self.shared_program['u_texture'] = self._texture
-                self.shared_program['u_use_texture'] = self._use_texture
+                self.shared_program['u_show_texture'] = self.show_texture
+            else:
+                self.shared_program['u_show_texture'] = False
 
             if md.has_vertex_color():
                 colors = md.get_vertex_colors(indexed='faces')
