@@ -66,7 +66,7 @@ class MeshData(object):
     results and avoiding unnecessary conversions.
     """
 
-    def __init__(self, vertices=None, faces=None, edges=None, texcoords=None,
+    def __init__(self, vertices=None, faces=None, texcoords=None, edges=None,
                  vertex_colors=None, face_colors=None, vertex_values=None):
         self._vertices = None  # (Nv,3) array of vertex coordinates
         self._vertices_indexed_by_faces = None  # (Nf, 3, 3) vertex coordinates
