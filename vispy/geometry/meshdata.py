@@ -72,8 +72,8 @@ class MeshData(object):
         self._vertices_indexed_by_faces = None  # (Nf, 3, 3) vertex coordinates
         self._vertices_indexed_by_edges = None  # (Ne, 2, 3) vertex coordinates
 
-        self._texcoords = None # (Nt, 2) array of texture coordinates
-        self._texcoords_indexed_by_faces = None # (Nt, 3, 2) texture coordinates
+        self._texcoords = None  # (Nt, 2) array of texture coordinates
+        self._texcoords_indexed_by_faces = None  # (Nt, 3, 2) texture coords
 
         # mappings between vertices, faces, and edges
         self._faces = None  # Nx3 indices into self._vertices, 3 verts/face
