@@ -32,6 +32,8 @@ class MeshData(object):
         instead be interpreted as (Nf, 3, 3) array of coordinates.
     faces : ndarray, shape (Nf, 3)
         Indices into the vertex array.
+    texcoords : ndarray, shape (Nt, 2)
+        Texture coordinates.
     edges : None
         [not available yet]
     vertex_colors : ndarray, shape (Nv, 4)
