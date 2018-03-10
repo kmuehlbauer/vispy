@@ -307,7 +307,6 @@ class MeshVisual(Visual):
         self.shading = shading
 
         if shading is not None:
-            #if texture is not None and texcoords is not None:
             if texcoords is not None:
                 vcode = texture_shading_vertex_template
                 fcode = texture_shading_fragment_template
