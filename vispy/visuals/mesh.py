@@ -283,7 +283,7 @@ class MeshVisual(Visual):
     """
     def __init__(self, vertices=None, faces=None, vertex_colors=None,
                  face_colors=None, color=(0.5, 0.5, 1, 1), vertex_values=None,
-                 texcoords=None, texture=None, meshdata=None, shading=None,
+                 texcoords=None, meshdata=None, shading=None,
                  mode='triangles',
                  **kwargs):
 
@@ -326,9 +326,6 @@ class MeshVisual(Visual):
         self._clim = 'auto'
 
         self._texcoords = VertexBuffer(np.zeros((0, 2), dtype=np.float32))
-        self._texture_data = texture
-        self.texture = texture
-        self._show_texture = texcoords is not None
 
         var = Varying('v_texcoord', 'vec2')
         self.shared_program.vert['v_texcoord'] = var
@@ -385,24 +382,6 @@ class MeshVisual(Visual):
         self._bounds = self._meshdata.get_bounds()
         if color is not None:
             self._color = Color(color)
-        self.mesh_data_changed()
-
-    @property
-    def texture(self):
-        return self._texture_data
-
-    @texture.setter
-    def texture(self, texture):
-        self._texture_data = texture
-        self._texture = Texture2D(texture) if texture is not None else None
-
-    @property
-    def show_texture(self):
-        return self._show_texture
-
-    @show_texture.setter
-    def show_texture(self, show_texture):
-        self._show_texture = show_texture
         self.mesh_data_changed()
 
     @property
@@ -513,10 +492,6 @@ class MeshVisual(Visual):
             if texcoords is not None:
                 self._texcoords.set_data(texcoords, convert=True)
                 self.shared_program.vert['texcoord'] = self._texcoords
-                self.shared_program['u_texture'] = self._texture
-                self.shared_program['u_show_texture'] = self.show_texture
-            else:
-                self.shared_program['u_show_texture'] = False
 
             if md.has_vertex_color():
                 colors = md.get_vertex_colors()
