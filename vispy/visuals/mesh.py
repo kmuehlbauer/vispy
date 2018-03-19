@@ -12,7 +12,7 @@ from __future__ import division
 import numpy as np
 
 from .visual import Visual
-from .shaders import Function, FunctionChain
+from .shaders import Function, FunctionChain, Varying
 from ..gloo import VertexBuffer, IndexBuffer, Texture2D
 from ..geometry import MeshData
 from ..color import Color, get_colormap
@@ -205,29 +205,16 @@ void main() {
 """
 
 texture_vertex_template = """
-varying vec4 v_base_color;
-varying vec2 v_texcoord;
-
 void main() {
-    v_texcoord = $texcoord;
-    v_base_color = $color_transform($base_color);
+    $v_texcoord = $texcoord;
+    $v_base_color = $color_transform($base_color);
     gl_Position = $transform($to_vec4($position));
 }
 """
 
 texture_fragment_template = """
-varying vec4 v_base_color;
-
-varying vec2 v_texcoord;
-uniform sampler2D u_texture;
-uniform bool u_show_texture;
-
 void main() {
-    if (u_show_texture) {
-        gl_FragColor = texture2D(u_texture, v_texcoord);
-    } else {
-        gl_FragColor = v_base_color;
-    }
+    gl_FragColor = $v_base_color;
 }
 """
 
@@ -306,20 +293,23 @@ class MeshVisual(Visual):
         # Visual.__init__ -> prepare_transforms() -> uses shading
         self.shading = shading
 
-        if shading is not None:
-            if texcoords is not None:
-                vcode = texture_shading_vertex_template
-                fcode = texture_shading_fragment_template
-            else:
-                vcode = shading_vertex_template
-                fcode = shading_fragment_template
-        else:
-            if texcoords is not None:
-                vcode = texture_vertex_template
-                fcode = texture_fragment_template
-            else:
-                vcode = vertex_template
-                fcode = fragment_template
+        # if shading is not None:
+        #     if texcoords is not None:
+        #         vcode = texture_shading_vertex_template
+        #         fcode = texture_shading_fragment_template
+        #     else:
+        #         vcode = shading_vertex_template
+        #         fcode = shading_fragment_template
+        # else:
+        #     if texcoords is not None:
+        #         vcode = texture_vertex_template
+        #         fcode = texture_fragment_template
+        #     else:
+        #         vcode = vertex_template
+        #         fcode = fragment_template
+        self.shading = None  # Remove shading for testing
+        vcode = texture_vertex_template
+        fcode = texture_fragment_template
         Visual.__init__(self, vcode=vcode, fcode=fcode, **kwargs)
 
         self.set_gl_state('translucent', depth_test=True, cull_face=False)
@@ -339,6 +329,10 @@ class MeshVisual(Visual):
         self._texture_data = texture
         self.texture = texture
         self._show_texture = texcoords is not None
+
+        var = Varying('v_texcoord', 'vec2')
+        self.shared_program.vert['v_texcoord'] = var
+        # self.shared_program.frag['v_texcoord'] = var
 
         # Uniform color
         self._color = Color(color)
@@ -558,11 +552,11 @@ class MeshVisual(Visual):
             texcoords = md.get_texcoords(indexed='faces')
             if texcoords is not None:
                 self._texcoords.set_data(texcoords, convert=True)
-                self.shared_program.vert['texcoord'] = self._texcoords
-                self.shared_program['u_texture'] = self._texture
-                self.shared_program['u_show_texture'] = self.show_texture
             else:
-                self.shared_program['u_show_texture'] = False
+                # Define dummy texture coordinates for all vertices.
+                shape = v.shape[0], 2
+                self._texcoords.set_data(np.zeros(shape), convert=True)
+            self.shared_program.vert['texcoord'] = self._texcoords
 
             if md.has_vertex_color():
                 colors = md.get_vertex_colors(indexed='faces')
@@ -597,6 +591,12 @@ class MeshVisual(Visual):
             self.shared_program.vert['base_color'] = colors
         else:
             self.shared_program.vert['base_color'] = VertexBuffer(colors)
+
+        # Pass base_color from vertex to fragment shader.
+        var = Varying('v_base_color', 'vec4')
+        self.shared_program.vert['v_base_color'] = var
+        self.shared_program.frag['v_base_color'] = var
+
         if self.shading is not None:
             # Normal data comes via vertex shader
             if self._normals.size > 0:
