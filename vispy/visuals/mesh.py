@@ -290,20 +290,20 @@ class MeshVisual(Visual):
         # Visual.__init__ -> prepare_transforms() -> uses shading
         self.shading = shading
 
-        # if shading is not None:
-        #     if texcoords is not None:
-        #         vcode = texture_shading_vertex_template
-        #         fcode = texture_shading_fragment_template
-        #     else:
-        #         vcode = shading_vertex_template
-        #         fcode = shading_fragment_template
-        # else:
-        #     if texcoords is not None:
-        #         vcode = texture_vertex_template
-        #         fcode = texture_fragment_template
-        #     else:
-        #         vcode = vertex_template
-        #         fcode = fragment_template
+        if shading is not None:
+            if texcoords is not None:
+                vcode = texture_shading_vertex_template
+                fcode = texture_shading_fragment_template
+            else:
+                vcode = shading_vertex_template
+                fcode = shading_fragment_template
+        else:
+            if texcoords is not None:
+                vcode = texture_vertex_template
+                fcode = texture_fragment_template
+            else:
+                vcode = vertex_template
+                fcode = fragment_template
         self.shading = None  # Remove shading for testing
         vcode = texture_vertex_template
         fcode = texture_fragment_template
@@ -322,8 +322,10 @@ class MeshVisual(Visual):
         self._cmap = get_colormap('cubehelix')
         self._clim = 'auto'
 
-        self._texcoords = VertexBuffer(np.zeros((0, 2), dtype=np.float32))
-        self._texcoord_varying = Varying('v_texcoord', 'vec2')
+        if texcoords is not None:
+        #if texcoords is None:
+            self._texcoords = VertexBuffer(np.zeros((0, 2), dtype=np.float32))
+            self._texcoord_varying = Varying('v_texcoord', 'vec2')
 
         # Uniform color
         self._color = Color(color)
@@ -532,6 +534,7 @@ class MeshVisual(Visual):
             texcoords = md.get_texcoords()
         else:
             texcoords = md.get_texcoords(indexed='faces')
+
         if texcoords is not None:
             self._texcoords.set_data(texcoords, convert=True)
             pass_texcoord = Function("void pass_tc() { $output = $input; }")
@@ -560,10 +563,12 @@ class MeshVisual(Visual):
         else:
             self.shared_program.vert['base_color'] = VertexBuffer(colors)
 
-        # Pass base_color from vertex to fragment shader.
-        var = Varying('v_base_color', 'vec4')
-        self.shared_program.vert['v_base_color'] = var
-        self.shared_program.frag['v_base_color'] = var
+        #if texcoords is not None:
+        if texcoords is None:
+            # Pass base_color from vertex to fragment shader.
+            var = Varying('v_base_color', 'vec4')
+            self.shared_program.vert['v_base_color'] = var
+            self.shared_program.frag['v_base_color'] = var
 
         if self.shading is not None:
             # Normal data comes via vertex shader
