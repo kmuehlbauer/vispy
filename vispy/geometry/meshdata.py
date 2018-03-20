@@ -256,6 +256,12 @@ class MeshData(object):
         else:
             raise ValueError("Invalid indexing mode. Accepts: None, 'faces'")
 
+    @property
+    def has_texcoords(self):
+        """Return True if this object has texture coordinates."""
+        return self._texcoords is not None \
+            or self._texcoords_indexed_by_faces is not None
+
     def get_bounds(self):
         """Get the mesh bounds
 

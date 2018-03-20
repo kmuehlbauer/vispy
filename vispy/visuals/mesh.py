@@ -206,7 +206,6 @@ void main() {
 
 texture_vertex_template = """
 void main() {
-    $v_texcoord = $texcoord;
     $v_base_color = $color_transform($base_color);
     gl_Position = $transform($to_vec4($position));
 }
@@ -324,10 +323,7 @@ class MeshVisual(Visual):
         self._clim = 'auto'
 
         self._texcoords = VertexBuffer(np.zeros((0, 2), dtype=np.float32))
-
-        var = Varying('v_texcoord', 'vec2')
-        self.shared_program.vert['v_texcoord'] = var
-        # self.shared_program.frag['v_texcoord'] = var
+        self._texcoord_varying = Varying('v_texcoord', 'vec2')
 
         # Uniform color
         self._color = Color(color)
@@ -486,11 +482,6 @@ class MeshVisual(Visual):
             self._faces.set_data(md.get_faces(), convert=True)
             self._index_buffer = self._faces
 
-            texcoords = md.get_texcoords()
-            if texcoords is not None:
-                self._texcoords.set_data(texcoords, convert=True)
-                self.shared_program.vert['texcoord'] = self._texcoords
-
             if md.has_vertex_color():
                 colors = md.get_vertex_colors()
                 colors = colors.astype(np.float32)
@@ -522,15 +513,6 @@ class MeshVisual(Visual):
                 self._normals.set_data(np.zeros((0, 3), dtype=np.float32))
             self._index_buffer = None
 
-            texcoords = md.get_texcoords(indexed='faces')
-            if texcoords is not None:
-                self._texcoords.set_data(texcoords, convert=True)
-            else:
-                # Define dummy texture coordinates for all vertices.
-                shape = v.shape[0], 2
-                self._texcoords.set_data(np.zeros(shape), convert=True)
-            self.shared_program.vert['texcoord'] = self._texcoords
-
             if md.has_vertex_color():
                 colors = md.get_vertex_colors(indexed='faces')
                 colors = colors.astype(np.float32)
@@ -544,6 +526,19 @@ class MeshVisual(Visual):
             else:
                 colors = self._color.rgba
         self.shared_program.vert['position'] = self._vertices
+
+        # Update buffer of texture coordinates.
+        if self.shading == 'smooth' and not md.has_face_indexed_data():
+            texcoords = md.get_texcoords()
+        else:
+            texcoords = md.get_texcoords(indexed='faces')
+        if texcoords is not None:
+            self._texcoords.set_data(texcoords, convert=True)
+            pass_texcoord = Function("void pass_tc() { $output = $input; }")
+            pass_texcoord['input'] = self._texcoords
+            pass_texcoord['output'] = self.texcoord_varying
+            vert_pre = self._get_hook('vert', 'pre')
+            vert_pre.add(pass_texcoord())
 
         # Position input handling
         if v.shape[-1] == 2:
@@ -587,6 +582,20 @@ class MeshVisual(Visual):
             self.shared_program.frag['shininess'] = self._shininess
 
         self._data_changed = False
+
+    @property
+    def has_texcoords(self):
+        """Return True if the texture coordinates are defined."""
+        return self.mesh_data.has_texcoords
+
+    @property
+    def texcoord_varying(self):
+        """Return the 'varying vec2' of the texture coordinates to bind
+        template variables in the fragment shader.
+
+        This is defined only if `has_texcoords` returns True.
+        """
+        return self._texcoord_varying
 
     @property
     def shininess(self):

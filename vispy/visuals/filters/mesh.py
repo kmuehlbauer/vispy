@@ -13,8 +13,10 @@ class TextureFilter(object):
         """)
 
     def _attach(self, visual):
+        if not visual.has_texcoords:
+            print("cannot attach TextureFilter: mesh does not have texcoords")
+            return
         frag_post = visual._get_hook('frag', 'post')
         frag_post.add(self.apply_texture())
-        self.apply_texture['texcoord'] = \
-            visual.shared_program.vert['v_texcoord']
+        self.apply_texture['texcoord'] = visual.texcoord_varying
         self.apply_texture['u_texture'] = Texture2D(self.texture)
