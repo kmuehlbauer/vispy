@@ -13,7 +13,7 @@ import numpy as np
 
 from .visual import Visual
 from .shaders import Function, FunctionChain, Varying
-from ..gloo import VertexBuffer, IndexBuffer, Texture2D
+from ..gloo import VertexBuffer, IndexBuffer
 from ..geometry import MeshData
 from ..color import Color, get_colormap
 from ..ext.six import string_types
