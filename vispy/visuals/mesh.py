@@ -270,8 +270,6 @@ class MeshVisual(Visual):
         The values to use for each vertex (for colormapping).
     texcoords : array-like | None
         The texture coordinates.
-    texture : array-like | None
-        The texture.
     meshdata : instance of MeshData | None
         The meshdata.
     shading : str | None
